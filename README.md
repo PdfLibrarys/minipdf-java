@@ -1,5 +1,7 @@
 # MiniPdf for Java
 
+[English](README.md) | [zh-CN](docs/README.zh-CN.md) | [zh-TW](docs/README.zh-TW.md) | [ja](docs/README.ja.md) | [ko](docs/README.ko.md) | [it](docs/README.it.md) | [fr](docs/README.fr.md)
+
 MiniPdf for Java supports JDK 8 through JDK 25 as a library and command-line tool for converting
 DOCX, XLSX, and PPTX files to PDF without Microsoft Office or LibreOffice.
 
@@ -114,3 +116,8 @@ Git history was preserved from [MiniPdf](https://github.com/mini-software/MiniPd
 (source commit `862ab485fdf8c5b3d3ec76afb6145f4ff68bf987`).
 The original repository maintains the .NET implementation. Open issues and
 pull requests for this implementation in this repository.
+
+## Visual results
+
+- [XLSX](https://mini-software.github.io/minipdf-web-page/?language=java&suite=issue&format=xlsx)
+- [DOCX](https://mini-software.github.io/minipdf-web-page/?language=java&suite=issue&format=docx)
