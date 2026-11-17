@@ -76,6 +76,7 @@ page-size and font-directory options.
 The Java implementation currently provides text-first Office conversion:
 
 - DOCX paragraphs, tabs, line breaks, explicit and section page breaks, and landscape page size
+- DOCX font line leading, footnote-aware widow/orphan control, and justified word-space compression
 - XLSX shared strings, inline strings, numbers, and booleans
 - PPTX slide text, native slide dimensions, and one PDF page per slide
 - bounded OOXML ZIP loading and XML external-entity protection
@@ -105,3 +106,11 @@ secrets before running it:
 Publish a GitHub Release whose tag matches `java-v<version>`, such as
 `java-v0.4.1`, or manually dispatch the workflow with `version` set to `0.4.1`.
 The requested version must match the Maven project version.
+
+## Repository migration
+
+This implementation now lives in [https://github.com/PdfLibrarys/minipdf-java](https://github.com/PdfLibrarys/minipdf-java). Its language-specific
+Git history was preserved from [MiniPdf](https://github.com/mini-software/MiniPdf)
+(source commit `862ab485fdf8c5b3d3ec76afb6145f4ff68bf987`).
+The original repository maintains the .NET implementation. Open issues and
+pull requests for this implementation in this repository.

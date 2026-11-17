@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MiniPdfCommandTest {
-    private static final Path REPOSITORY_ROOT = Paths.get("..", "..").toAbsolutePath().normalize();
+    private static final Path REPOSITORY_ROOT = Paths.get("..").toAbsolutePath().normalize();
 
     @TempDir
     Path temporaryDirectory;

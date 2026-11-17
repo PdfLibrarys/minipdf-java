@@ -4,11 +4,14 @@ import io.github.minisoftware.minipdf.ConversionOptions;
 import io.github.minisoftware.minipdf.MiniPdfException;
 import io.github.minisoftware.minipdf.PageSize;
 import io.github.minisoftware.minipdf.internal.SimplePdfTextRenderer;
+import org.apache.fontbox.ttf.HorizontalHeaderTable;
+import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDCIDFontType2;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
@@ -630,6 +633,11 @@ final class PoiDocxRenderer {
         float wrapTolerance = 0.0f;
         boolean paragraphBold = paragraph.getRuns().stream()
                 .anyMatch(run -> !run.text().isEmpty() && run.isBold());
+        // LibreOffice's interoperable justification permits 75% word spacing.
+        float minimumWordSpacing = useWordParagraphLayout
+                && paragraph.getAlignment() == ParagraphAlignment.BOTH
+                ? -font.getStringWidth(" ") / 1000.0f * fontSize * 0.25f
+                : 0.0f;
         List<String> lines = wrap(
             font,
             text.replace('\t', ' '),
@@ -637,7 +645,8 @@ final class PoiDocxRenderer {
             firstLineWidth + wrapTolerance,
             availableWidth + wrapTolerance,
             autoSpacing,
-            paragraphBold);
+            paragraphBold,
+            minimumWordSpacing);
         float lineHeight = paragraphLineHeight(
             paragraph, fontSize, fontSize * 1.2f, context.linePitch, useWordParagraphLayout,
             bullet != null, font);
@@ -676,8 +685,9 @@ final class PoiDocxRenderer {
             }
             float wordSpacing = paragraph.getAlignment() == ParagraphAlignment.BOTH
                     && useWordParagraphLayout
-                    && index < lines.size() - 1
-                    ? justifiedWordSpacing(line, estimatedWidth, lineWidth)
+                    ? (index < lines.size() - 1 || estimatedWidth > lineWidth
+                        ? justifiedWordSpacing(line, estimatedWidth, lineWidth, minimumWordSpacing)
+                        : 0.0f)
                     : 0.0f;
             showText(context.content, font, fontSize, line, x, baseline, autoSpacing, wordSpacing);
             context.y -= lineHeight;
@@ -2826,6 +2836,18 @@ final class PoiDocxRenderer {
             float width,
             AutoSpacing autoSpacing,
             boolean bold) throws IOException {
+        return wrap(font, text, fontSize, firstLineWidth, width, autoSpacing, bold, 0.0f);
+    }
+
+    private static List<String> wrap(
+            PDFont font,
+            String text,
+            float fontSize,
+            float firstLineWidth,
+            float width,
+            AutoSpacing autoSpacing,
+            boolean bold,
+            float minimumWordSpacing) throws IOException {
         if (text.isEmpty()) {
             return Collections.singletonList("");
         }
@@ -2837,6 +2859,7 @@ final class PoiDocxRenderer {
             line.appendCodePoint(codePoint);
             while (line.codePointCount(0, line.length()) > 1
                     && textWidth(font, line.toString(), fontSize, autoSpacing, bold)
+                        + line.chars().filter(value -> value == ' ').count() * minimumWordSpacing
                         > (lines.isEmpty() ? firstLineWidth : width)) {
                 int breakOffset = lastWrapBoundary(line);
                 if (breakOffset <= 0) {
@@ -4416,7 +4439,7 @@ final class PoiDocxRenderer {
             float fontSize,
             float naturalHeight,
             float linePitch,
-            boolean useWordParagraphLayout) {
+            boolean useWordParagraphLayout) throws IOException {
         return paragraphLineHeight(
                 paragraph, fontSize, naturalHeight, linePitch, useWordParagraphLayout, false);
     }
@@ -4427,7 +4450,7 @@ final class PoiDocxRenderer {
             float naturalHeight,
             float linePitch,
             boolean useWordParagraphLayout,
-            boolean symbolBullet) {
+            boolean symbolBullet) throws IOException {
         return paragraphLineHeight(
                 paragraph, fontSize, naturalHeight, linePitch, useWordParagraphLayout,
                 symbolBullet, null);
@@ -4440,7 +4463,7 @@ final class PoiDocxRenderer {
             float linePitch,
             boolean useWordParagraphLayout,
             boolean symbolBullet,
-            PDFont lineFont) {
+            PDFont lineFont) throws IOException {
         double spacing = useWordParagraphLayout
                 ? effectiveSpacing(paragraph).line()
                 : paragraph.getSpacingBetween();
@@ -4479,7 +4502,19 @@ final class PoiDocxRenderer {
      * falling back to the Times New Roman factor for fonts without metrics
      * (Standard14 test fonts).
      */
-    private static float fontMetricsFactor(PDFont lineFont) {
+    private static float fontMetricsFactor(PDFont lineFont) throws IOException {
+        if (lineFont instanceof PDType0Font
+                && ((PDType0Font) lineFont).getDescendantFont()
+                        instanceof PDCIDFontType2) {
+            TrueTypeFont trueType =
+                    ((PDCIDFontType2)
+                            ((PDType0Font) lineFont).getDescendantFont()).getTrueTypeFont();
+            if (trueType != null) {
+                HorizontalHeaderTable header = trueType.getHorizontalHeader();
+                return (header.getAscender() - header.getDescender()
+                        + Math.max(0, header.getLineGap())) / (float) trueType.getUnitsPerEm();
+            }
+        }
         if (lineFont != null && lineFont.getFontDescriptor() != null) {
             float ascent = lineFont.getFontDescriptor().getAscent();
             float descent = lineFont.getFontDescriptor().getDescent();
@@ -4693,11 +4728,8 @@ final class PoiDocxRenderer {
         }
         content.beginText();
         content.setFont(font, fontSize);
-        if (wordSpacing > 0.0f) {
-            content.setWordSpacing(wordSpacing);
-        }
         content.newLineAtOffset(x, y);
-        if (eastAsianBoundaryCount(text, autoSpacing) == 0) {
+        if (eastAsianBoundaryCount(text, autoSpacing) == 0 && wordSpacing == 0.0f) {
             content.showText(text);
         } else {
             List<Object> positioned = new ArrayList<>();
@@ -4711,6 +4743,11 @@ final class PoiDocxRenderer {
                     start = offset;
                 }
                 offset += Character.charCount(codePoint);
+                if (codePoint == ' ' && wordSpacing != 0.0f) {
+                    positioned.add(text.substring(start, offset));
+                    positioned.add(-wordSpacing / fontSize * 1000.0f);
+                    start = offset;
+                }
                 previous = codePoint;
             }
             positioned.add(text.substring(start));
@@ -4720,8 +4757,13 @@ final class PoiDocxRenderer {
     }
 
     static float justifiedWordSpacing(String text, float textWidth, float availableWidth) {
+        return justifiedWordSpacing(text, textWidth, availableWidth, 0.0f);
+    }
+
+    static float justifiedWordSpacing(
+            String text, float textWidth, float availableWidth, float minimumWordSpacing) {
         long spaces = text.codePoints().filter(codePoint -> codePoint == ' ').count();
-        return spaces == 0 ? 0.0f : Math.max(0.0f, availableWidth - textWidth) / spaces;
+        return spaces == 0 ? 0.0f : Math.max(minimumWordSpacing, (availableWidth - textWidth) / spaces);
     }
 
     private static float sum(List<Float> values, int count) {
@@ -4840,7 +4882,7 @@ final class PoiDocxRenderer {
             if (lineCount < 2 || lineHeight <= 0.0f) {
                 return;
             }
-            int linesThatFit = (int) Math.floor((y - bottomMargin) / lineHeight);
+            int linesThatFit = (int) Math.floor((y - bottomMargin - footnoteReservedHeight) / lineHeight);
             if (linesThatFit > 0
                     && linesThatFit < lineCount
                     && (linesThatFit < 2 || lineCount - linesThatFit < 2)) {

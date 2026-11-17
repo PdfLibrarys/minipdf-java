@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClassicFixtureSmokeTest {
-    private static final Path REPOSITORY_ROOT = Paths.get("..", "..").toAbsolutePath().normalize();
+    private static final Path REPOSITORY_ROOT = Paths.get("..").toAbsolutePath().normalize();
 
     @Test
     void convertsTrackedXlsxFixture() throws Exception {
@@ -263,6 +263,21 @@ class ClassicFixtureSmokeTest {
                             "[INTEREST_RATE] %/năm.\nTrong trường hợp"),
                     secondPage);
             assertTrue(lines(secondPage).anyMatch(line -> line.trim().equals("2")), secondPage);
+            java.util.List<Float> justifiedEdges = new java.util.ArrayList<>();
+            PDFTextStripper positions = new PDFTextStripper() {
+                @Override
+                protected void writeString(String value, java.util.List<org.apache.pdfbox.text.TextPosition> textPositions)
+                        throws java.io.IOException {
+                    if (value.contains("[INTEREST_RATE]")) {
+                        org.apache.pdfbox.text.TextPosition last = textPositions.get(textPositions.size() - 1);
+                        justifiedEdges.add(last.getXDirAdj() + last.getWidthDirAdj());
+                    }
+                    super.writeString(value, textPositions);
+                }
+            };
+            positions.getText(document);
+            assertEquals(1, justifiedEdges.size());
+            assertEquals(540.0f, justifiedEdges.get(0), 0.5f);
         }
     }
 
