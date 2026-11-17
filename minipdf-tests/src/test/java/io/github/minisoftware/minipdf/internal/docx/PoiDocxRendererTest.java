@@ -265,6 +265,12 @@ class PoiDocxRendererTest {
     }
 
     @Test
+    void boundsCompressedJustifiedWordSpacing() {
+        assertEquals(-0.5f, PoiDocxRenderer.justifiedWordSpacing("one two three", 101.0f, 100.0f, -0.75f));
+        assertEquals(-0.75f, PoiDocxRenderer.justifiedWordSpacing("one two three", 104.0f, 100.0f, -0.75f));
+    }
+
+    @Test
     void honorsExplicitAutoLineSpacingForLatinParagraphs() throws Exception {
         try (XWPFDocument document = new XWPFDocument()) {
             XWPFParagraph paragraph = document.createParagraph();

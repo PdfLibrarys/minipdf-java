@@ -45,6 +45,8 @@ jobs:
             runner: ubuntu-22.04
           - java-version: '10'
             runner: ubuntu-22.04
+          - java-version: '17'
+            runner: windows-latest
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -72,11 +74,16 @@ jobs:
           java-version: '17'
 
       - name: Install CJK fonts
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes fonts-noto-cjk fonts-unifont fonts-wqy-microhei
 
       - name: Test
-        if: matrix.java-version != '10'
+        if: matrix.java-version != '10' && runner.os != 'Windows'
         run: ./mvnw -B -ntp verify
+
+      - name: Test Windows font-dependent pagination
+        if: runner.os == 'Windows'
+        run: ./mvnw.cmd -B -ntp verify
 
       - name: Test on JDK 10
         if: matrix.java-version == '10'
